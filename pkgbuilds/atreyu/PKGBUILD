@@ -1,0 +1,88 @@
+# Maintainer: Spencer Bull <spencer.bull@hey.com>
+
+pkgname=atreyu
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='AI assistant plugin for the Omarchy shell'
+arch=('x86_64')
+url='https://github.com/omacom/atreyu'
+license=('MIT')
+
+# What the plugin needs to load and answer at all; anything that only one
+# feature executes, and that the code probes for first, is an optdepend. The
+# citations for each entry are in .omarchy/README.md.
+depends=(
+  'hyprland'
+  'imagemagick'
+  'jq'
+  'nodejs>=22'
+  'omarchy'
+  'quickshell'
+  'util-linux'
+)
+optdepends=(
+  'grim: clip a window or region of the screen as context'
+  'wl-clipboard: copy an answer to the clipboard'
+  'xdg-utils: open links from answers'
+  'uwsm: launch installed apps from a chat'
+  'gtk3: launch installed apps from a chat (gtk-launch)'
+  'voxtype: voice dictation and custom-word training'
+  'herdr: continue a chat in a Herdr workspace'
+  'tesseract: text extraction from captured screenshots'
+  'libpulse: audio device selection for voice (pactl)'
+  'pipewire-audio: spoken-answer playback and microphone routing'
+  'ffmpeg: level metering while spoken answers play'
+  'espeak-ng: local Kokoro text-to-speech'
+  'openai-codex: Codex ACP harness'
+  'opencode: OpenCode ACP harness'
+  'lua: syntax check of the generated Hyprland bindings'
+)
+
+# runtime/dist/atreyu-broker and runtime/dist/adapters/codex-acp are static
+# x86-64 ELF stubs that carry their JavaScript payload after the code and hand
+# it to the system node. They have no section headers; strip or debug
+# splitting would corrupt them.
+options=('!strip' '!debug')
+
+source_x86_64=("$url/releases/download/v$pkgver/$pkgname-$pkgver-linux-x86_64.tar.gz")
+# Fill from the SHA256SUMS asset of https://github.com/omacom/atreyu/releases/tag/v0.1.0
+sha256sums_x86_64=('FILL_FROM_UPSTREAM_SHA256SUMS')
+
+package() {
+  local plugin="$pkgdir/usr/share/omarchy/plugins/omarchy.atreyu"
+
+  # The archive's single top-level directory is the complete plugin install
+  # tree. Copy it whole so nothing the shell or broker expects is left behind,
+  # then normalize modes: directories 0755, files 0644 or 0755 as shipped, and
+  # no group/world write bits regardless of the builder's umask.
+  install -d "$plugin"
+  cp -a "$pkgname-$pkgver/." "$plugin/"
+  chmod -R u=rwX,go=rX "$plugin"
+
+  # The shell scans the system plugin root for manifests; a tree without one
+  # would install cleanly and silently never load.
+  [[ -f "$plugin/manifest.json" ]] || {
+    echo "release tree is missing manifest.json" >&2
+    return 1
+  }
+
+  # Re-assert the executables the plugin invokes directly. A missing entry
+  # fails the build rather than shipping a plugin that cannot start.
+  local executable
+  for executable in \
+    runtime/bin/atreyu-broker \
+    runtime/bin/codex-acp \
+    runtime/dist/atreyu-broker \
+    runtime/dist/adapters/codex-acp \
+    scripts/install-hotkeys.sh \
+    scripts/install-browser-companion.sh \
+    scripts/manage-voice-escape.sh \
+    browser-companion/native-host/atreyu-browser-companion-host; do
+    chmod 755 "$plugin/$executable"
+  done
+
+  install -Dm644 "$pkgname-$pkgver/LICENSE" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$pkgname-$pkgver/THIRD_PARTY_NOTICES.md" \
+    "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+}
