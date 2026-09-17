@@ -1,0 +1,42 @@
+# Maintainer: Spencer Bull <spencerbull2554@gmail.com>
+#
+# The CS35L56 amplifiers in the Panther Lake Dell XPS 13 DX13260 (subsystem
+# 1028:0e54) ask for firmware by that ID, and linux-firmware only gained the
+# nine 10280e54 aliases in 20260910. Every file they point at already ships in
+# older linux-firmware-cirrus, so the aliases are all this package carries.
+#
+# They live under firmware/updates, which the kernel searches first and no
+# Arch package owns. A package named linux-firmware-cirrus in [omarchy] would
+# never be chosen, because pacman takes a name from the first repository that
+# lists it and [core] comes first; and owning the real paths would conflict
+# with the genuine package once the Arch snapshot carries them.
+
+pkgname=dell-xps13-speaker-firmware
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="CS35L56 speaker firmware aliases for the Dell XPS 13 DX13260 (1028:0e54)"
+arch=('any')
+url="https://github.com/omacom-io/omarchy-pkgs"
+license=('MIT')
+depends=('linux-firmware-cirrus')
+source=('LICENSE')
+sha256sums=('fd9348252dda847b9b4c19e44c5ab101098c7d0470c2238857ce1e14bb63207b')
+
+package() {
+  local updates="${pkgdir}/usr/lib/firmware/updates/cirrus"
+  local alias="cs35l56-b2-dsp1-misc-10280e54"
+  local tuning="cs35l56-b2-dsp1-misc-10280e53"
+  local spkid amp
+
+  install -d "$updates"
+  for spkid in 1 2 3; do
+    ln -s "../../cirrus/cs35l56/CS35L56_Rev4.5.9.wmfw.zst" \
+      "${updates}/${alias}-spkid${spkid}.wmfw.zst"
+    for amp in ampl ampr; do
+      ln -s "../../cirrus/${tuning}-spkid${spkid}-${amp}.bin.zst" \
+        "${updates}/${alias}-spkid${spkid}-${amp}.bin.zst"
+    done
+  done
+
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
