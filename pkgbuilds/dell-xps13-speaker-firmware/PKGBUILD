@@ -10,6 +10,11 @@
 # never be chosen, because pacman takes a name from the first repository that
 # lists it and [core] comes first; and owning the real paths would conflict
 # with the genuine package once the Arch snapshot carries them.
+#
+# Searched first also means these win over the genuine aliases once they
+# arrive, including any dedicated 10280e54 tuning upstream may ship later. So
+# this is temporary: when stable's linux-firmware-cirrus is >= 20260910, drop
+# the package from Omarchy with a migration and delete this recipe.
 
 pkgname=dell-xps13-speaker-firmware
 pkgver=1.0.0
