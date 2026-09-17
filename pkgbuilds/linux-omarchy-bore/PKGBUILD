@@ -3,7 +3,7 @@
 
 pkgbase=linux-omarchy-bore
 pkgver=7.2.5
-pkgrel=5
+pkgrel=6
 pkgdesc='Omarchy Linux (BORE CPU scheduler, ADIOS I/O scheduler)'
 url='https://omarchy.org'
 arch=(
