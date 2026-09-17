@@ -82,7 +82,7 @@ def validate(watch):
     allowed = PROVIDERS | {"pattern", "path", "package", "branch", "variables", "fields",
                            "submodules", "allow_prerelease", "unescape_json", "filenames",
                            "sequence", "version", "revision", "revision_variable",
-                           "mutable_sources", "member", "dist_tag"}
+                           "mutable_sources", "member", "dist_tag", "pkgrel"}
     if watch.keys() - allowed:
         raise ValueError(f"unknown watch fields: {sorted(watch.keys() - allowed)}")
     value = watch[provider]
@@ -131,13 +131,15 @@ def validate(watch):
     for field in ("allow_prerelease", "unescape_json", "filenames", "sequence"):
         if field in watch and not isinstance(watch[field], bool):
             raise ValueError(f"watch.{field} must be boolean")
-    for field in ("version", "revision", "member", "dist_tag"):
+    for field in ("version", "revision", "member", "dist_tag", "pkgrel"):
         if field in watch and (not isinstance(watch[field], str) or not watch[field]):
             raise ValueError(f"watch.{field} must be a string template")
     if "revision_variable" in watch:
         name = watch["revision_variable"]
         if not isinstance(name, str) or name not in watch.get("variables", {}) or not watch.get("revision"):
             raise ValueError("revision_variable requires a declared variable and revision template")
+    if "pkgrel" in watch and not watch.get("revision_variable"):
+        raise ValueError("pkgrel requires a revision_variable")
     for field in ("mutable_sources",):
         entries = watch.get(field, [])
         if not isinstance(entries, list) or any(not isinstance(v, str) or not re.fullmatch(r"source(?:_[a-z0-9_]+)?:[0-9]+", v) for v in entries):
@@ -503,7 +505,12 @@ def sync(package, fetch, min_age=0, check=False):
         revision_field = watch.get("revision_variable")
         if revision_field not in changed_variables or vercmp(changed_variables[revision_field], scalar(before, revision_field, "0")) <= 0:
             raise ValueError("release metadata changed without a newer version/revision")
-    new_pkgrel = "1" if order > 0 else bump_pkgrel(scalar(before, "pkgrel"))
+    if "pkgrel" in watch:
+        new_pkgrel = watch["pkgrel"].format_map(release["values"])
+        if not re.fullmatch(r"[1-9][0-9]*(?:\.[0-9]+)?", new_pkgrel):
+            raise ValueError("upstream pkgrel must be a positive package revision")
+    else:
+        new_pkgrel = "1" if order > 0 else bump_pkgrel(scalar(before, "pkgrel"))
     text = replace_scalar(original, "pkgver", release["pkgver"])
     text = replace_scalar(text, "pkgrel", new_pkgrel)
     for name, value in release["variables"].items():

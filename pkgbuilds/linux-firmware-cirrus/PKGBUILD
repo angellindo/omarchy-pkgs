@@ -1,0 +1,92 @@
+# Maintainer: Spencer Bull <spencerbull2554@gmail.com>
+
+pkgbase=linux-firmware-cirrus
+pkgname=(linux-firmware-cirrus linux-firmware-other linux-firmware-whence
+         linux-firmware-amd linux-firmware-intel linux-firmware-ti)
+pkgver=20260916
+pkgrel=1
+_archrel=1
+pkgdesc="Firmware files for Linux"
+arch=('any')
+url="https://gitlab.com/kernel-firmware/linux-firmware"
+license=('LicenseRef-WHENCE')
+options=('!strip' '!debug')
+source=(
+  "https://archive.archlinux.org/packages/l/linux-firmware-cirrus/linux-firmware-cirrus-${pkgver}-${_archrel}-any.pkg.tar.zst"
+  "https://archive.archlinux.org/packages/l/linux-firmware-cirrus/linux-firmware-cirrus-${pkgver}-${_archrel}-any.pkg.tar.zst.sig"
+  "https://archive.archlinux.org/packages/l/linux-firmware-other/linux-firmware-other-${pkgver}-${_archrel}-any.pkg.tar.zst"
+  "https://archive.archlinux.org/packages/l/linux-firmware-other/linux-firmware-other-${pkgver}-${_archrel}-any.pkg.tar.zst.sig"
+  "https://archive.archlinux.org/packages/l/linux-firmware-whence/linux-firmware-whence-${pkgver}-${_archrel}-any.pkg.tar.zst"
+  "https://archive.archlinux.org/packages/l/linux-firmware-whence/linux-firmware-whence-${pkgver}-${_archrel}-any.pkg.tar.zst.sig"
+  "https://archive.archlinux.org/packages/l/linux-firmware-amd/linux-firmware-amd-${pkgver}-${_archrel}-any.pkg.tar.zst"
+  "https://archive.archlinux.org/packages/l/linux-firmware-amd/linux-firmware-amd-${pkgver}-${_archrel}-any.pkg.tar.zst.sig"
+  "https://archive.archlinux.org/packages/l/linux-firmware-intel/linux-firmware-intel-${pkgver}-${_archrel}-any.pkg.tar.zst"
+  "https://archive.archlinux.org/packages/l/linux-firmware-intel/linux-firmware-intel-${pkgver}-${_archrel}-any.pkg.tar.zst.sig"
+  "https://archive.archlinux.org/packages/l/linux-firmware-ti/linux-firmware-ti-${pkgver}-${_archrel}-any.pkg.tar.zst"
+  "https://archive.archlinux.org/packages/l/linux-firmware-ti/linux-firmware-ti-${pkgver}-${_archrel}-any.pkg.tar.zst.sig"
+)
+noextract=("linux-firmware-cirrus-${pkgver}-${_archrel}-any.pkg.tar.zst"
+"linux-firmware-other-${pkgver}-${_archrel}-any.pkg.tar.zst"
+"linux-firmware-whence-${pkgver}-${_archrel}-any.pkg.tar.zst"
+"linux-firmware-amd-${pkgver}-${_archrel}-any.pkg.tar.zst"
+"linux-firmware-intel-${pkgver}-${_archrel}-any.pkg.tar.zst"
+"linux-firmware-ti-${pkgver}-${_archrel}-any.pkg.tar.zst")
+sha256sums=(
+  '8cc577bd42f8bee1ecf7ea1356d343e027e5e4836491198a6caf0b9288198c7c' 'SKIP'
+  'f8105aa5ebc26b29ed586eaa3612874546a6a20362224af95ad999fe4b075ade' 'SKIP'
+  '02f3d8273e1b98a4e9f629fbaa5a703657846ad32b90d39a7c70b1f0e25df5db' 'SKIP'
+  '94697c99d14ec4676edb71ff32b7ca6b801089ebc67c6fe1f71d49ca961d6512' 'SKIP'
+  '23d158e5b1a906e06a1d9a26e636a556d32de5a22185eddf5746dfbdad49fc13' 'SKIP'
+  'b7511ba47de4dff69e32ee3f9f02923ae7177edda6ea25bb2b74f1517122ebb7' 'SKIP'
+)
+validpgpkeys=('83BC8889351B5DEBBB68416EB8AC08600F108CDF')
+
+_package_firmware() {
+  bsdtar -xf "${srcdir}/${pkgname}-${pkgver}-${_archrel}-any.pkg.tar.zst" -C "$pkgdir" \
+    --exclude='.PKGINFO' --exclude='.MTREE' --exclude='.BUILDINFO' \
+    --exclude='.INSTALL' --exclude='.CHANGELOG'
+}
+
+package_linux-firmware-cirrus() {
+  pkgdesc+=" - Firmware for Cirrus Logic audio devices"
+  license+=('LicenseRef-cirrus')
+  depends=("linux-firmware-whence=${pkgver}-${pkgrel}" "linux-firmware-other=${pkgver}-${pkgrel}")
+  _package_firmware
+}
+
+package_linux-firmware-other() {
+  pkgdesc+=" - Unsorted firmware for various devices"
+  # These packages receive files formerly owned by Other; transfer them together.
+  depends=("linux-firmware-whence=${pkgver}-${pkgrel}"
+           "linux-firmware-cirrus=${pkgver}-${pkgrel}"
+           "linux-firmware-amd=${pkgver}-${pkgrel}"
+           "linux-firmware-intel=${pkgver}-${pkgrel}"
+           "linux-firmware-ti=${pkgver}-${pkgrel}")
+  _package_firmware
+}
+
+package_linux-firmware-whence() {
+  pkgdesc+=" - WHENCE file (vendor licenses)"
+  _package_firmware
+}
+
+package_linux-firmware-amd() {
+  pkgdesc+=" - Firmware for non-GPU AMD devices"
+  license+=('LicenseRef-amd')
+  depends=("linux-firmware-whence=${pkgver}-${pkgrel}" "linux-firmware-other=${pkgver}-${pkgrel}")
+  _package_firmware
+}
+
+package_linux-firmware-intel() {
+  pkgdesc+=" - Firmware for Intel devices"
+  license+=('Apache-2.0' 'GPL-2.0-only' 'LicenseRef-intel')
+  depends=("linux-firmware-whence=${pkgver}-${pkgrel}" "linux-firmware-other=${pkgver}-${pkgrel}")
+  _package_firmware
+}
+
+package_linux-firmware-ti() {
+  pkgdesc+=" - Firmware for Texas Instruments devices"
+  license+=('GPL-2.0-or-later' 'LicenseRef-ti')
+  depends=("linux-firmware-whence=${pkgver}-${pkgrel}" "linux-firmware-other=${pkgver}-${pkgrel}")
+  _package_firmware
+}

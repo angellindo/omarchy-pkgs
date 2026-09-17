@@ -46,6 +46,8 @@ Cursor CLI uses `sequence` to preserve its date/counter/hash version convention
 when the vendor publishes a second hash on the same day. A new pkgver resets
 pkgrel to 1, but the complete epoch:pkgver-pkgrel must still increase.
 
+Binary redistributions can declare `pkgrel` as a template, together with `revision_variable`, to retain the upstream packaging revision instead of incrementing a downstream counter. The expanded value must be a positive package revision and the complete package version must still increase; a local rebuild cannot silently be downgraded. Cirrus firmware uses this to preserve Arch revision jumps.
+
 GitHub releases exclude drafts and prereleases unless `allow_prerelease` is true.
 Existing `min_release_age` policies apply: a feed without a verifiable publication
 time cannot bypass a configured hold. Git branch watches derive a commit count
@@ -167,6 +169,14 @@ in `origin` and has no effect on release selection.
 `grok-bot`, `libfprint-git`, `libretro-cap32-git`, `libretro-database-git`, `libretro-fbneo-git`, `libretro-uae-git`, `libretro-vice-git`, `quickshell-git`, `supergfxctl`.
 
 These packages were already excluded from automatic AUR updates. The migration preserves that policy.
+
+## Cirrus firmware
+
+`linux-firmware-cirrus` tracks Arch's current firmware release and packaging revision through the Arch package JSON feed. It builds for the fast ring using signed Arch archives, preserving their complete payloads and normal package names. `_archrel` selects the Arch source revision, and the watch preserves that revision in `pkgrel`, including when intermediate Arch revisions were missed.
+
+The same split recipe ships `linux-firmware-other`, `linux-firmware-amd`, `linux-firmware-intel`, `linux-firmware-ti`, and `linux-firmware-whence`. Between stable's 20260810 snapshot and 20260916, Other transfers 190 files to Cirrus, 23 to AMD, nine to Intel, and 666 to TI. Versioned dependencies keep the ownership-changing packages together, including when only one is requested; the dependency cycles have no install scripts and are resolved in one pacman transaction. All outputs must be published together. Compare the firmware manifests when upstream changes package boundaries again.
+
+Clients must prefer `[omarchy]` over Arch's repositories to receive same-name fast-ring updates. Repository order also applies to dependencies and channel refreshes; a one-time qualified install does not establish that policy. This is an ongoing package, with no snapshot retirement or machine-specific aliases.
 
 ## Package-specific boundaries
 

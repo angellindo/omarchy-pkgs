@@ -396,5 +396,81 @@ class T3CodeHookTest(unittest.TestCase):
         self.assertEqual(result.stdout, '')
 
 
+class CirrusWatchTest(unittest.TestCase):
+    fake_file = WatchTest.fake_file
+    sync_release = WatchTest.sync_release
+    write_watch = WatchTest.write_watch
+    def setUp(self):
+        WatchTest.setUp(self)
+        source = ROOT / "pkgbuilds/linux-firmware-cirrus"
+        shutil.copyfile(source / "PKGBUILD", self.recipe)
+        shutil.copyfile(source / ".omarchy/package.json", self.package / ".omarchy/package.json")
+        self.before = w.read_recipe(self.recipe)
+        self.version = w.scalar(self.before, "pkgver")
+        self.revision = w.scalar(self.before, "_archrel")
+        self.metadata = json.loads((self.package / ".omarchy/package.json").read_text())
+
+    def firmware_release(self, version, revision):
+        data = {"pkgver": version, "pkgrel": revision, "build_date": "2026-09-17T03:21:22Z"}
+        with patch.object(self.fetch, "json", return_value=data):
+            return w.discover(self.metadata["upstream"]["watch"], self.fetch)[0]
+
+    def test_firmware_arch_revision_jump_updates_every_payload_and_signature(self):
+        revision = str(int(self.revision) + 3)
+        urls = []
+        def fetch(url):
+            urls.append(url)
+            return self.fake_file(url)
+        result = self.sync_release(self.firmware_release(self.version, revision), fetch)
+        after = w.read_recipe(self.recipe)
+        self.assertEqual(w.scalar(after, "_archrel"), revision)
+        self.assertEqual(result["after"], "0:" + self.version + "-" + revision)
+        expected = {"linux-firmware-" + name for name in ("cirrus", "other", "whence", "amd", "intel", "ti")}
+        self.assertEqual(len(urls), 12)
+        for name in expected:
+            base = f"https://archive.archlinux.org/packages/l/{name}/{name}-{self.version}-{revision}-any.pkg.tar.zst"
+            self.assertIn(base, urls)
+            self.assertIn(base + ".sig", urls)
+        self.assertEqual(after["sha256sums"][1::2], ["SKIP"] * 6)
+        with patch.object(w, "discover", return_value=[self.firmware_release(self.version, revision)]), patch.object(self.fetch, "file") as fetch:
+            self.assertEqual(w.sync(self.package, self.fetch)["status"], "skipped")
+            fetch.assert_not_called()
+
+    def test_firmware_new_release_advances_the_whole_split_recipe(self):
+        version = str(int(self.version) + 100)
+        result = self.sync_release(self.firmware_release(version, "2"))
+        self.assertEqual(result["after"], f"0:{version}-2")
+        after = w.read_recipe(self.recipe)
+        self.assertEqual(w.scalar(after, "_archrel"), "2")
+        self.assertTrue(all(f"-{version}-2-any.pkg.tar.zst" in url for url in after["source"]))
+
+    def test_firmware_invalid_package_revision_preserves_recipe(self):
+        original = self.recipe.read_bytes()
+        path = self.package / ".omarchy/package.json"
+        self.metadata["upstream"]["watch"]["pkgrel"] = "0"
+        path.write_text(json.dumps(self.metadata))
+        with self.assertRaisesRegex(ValueError, "positive package revision"):
+            self.sync_release(self.firmware_release(str(int(self.version) + 100), "1"))
+        self.assertEqual(self.recipe.read_bytes(), original)
+
+    def test_firmware_revision_cannot_downgrade_a_local_rebuild(self):
+        revision = str(int(self.revision) + 1)
+        self.recipe.write_text(w.replace_scalar(self.recipe.read_text(), "pkgrel", str(int(revision) + 10)))
+        original = self.recipe.read_bytes()
+        with self.assertRaisesRegex(ValueError, "complete package version"):
+            self.sync_release(self.firmware_release(self.version, revision))
+        self.assertEqual(self.recipe.read_bytes(), original)
+
+    def test_firmware_missing_companion_signature_preserves_recipe(self):
+        original = self.recipe.read_bytes()
+        def fetch(url):
+            if "linux-firmware-ti-" in url and url.endswith(".sig"):
+                raise ValueError("companion signature unavailable")
+            return self.fake_file(url)
+        with self.assertRaisesRegex(ValueError, "companion signature"):
+            self.sync_release(self.firmware_release(str(int(self.version) + 100), "1"), fetch)
+        self.assertEqual(self.recipe.read_bytes(), original)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
