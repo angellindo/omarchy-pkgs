@@ -1,0 +1,13 @@
+[Unit]
+Description=Apple T1 Touch Bar (guarded configuration-1 driver)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=45
+ExecCondition=/usr/lib/apple-t1-touchbar/t1-touchbar condition
+ExecStart=/usr/lib/apple-t1-touchbar/t1-touchbar start
+
+[Install]
+WantedBy=graphical.target

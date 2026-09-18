@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: GPL-2.0-only
+pkgname=apple-t1-touchbar-dkms
+pkgver=0.1.r2.ga33c7eb
+pkgrel=1
+pkgdesc='Pinned T1 Touch Bar DKMS driver with guarded late loading for MacBookPro14,3'
+arch=('x86_64')
+url='https://github.com/monomyth/t1-touchbar'
+license=('GPL-2.0-only')
+depends=('dkms' 'python' 'kmod' 'systemd' 'linux-omarchy-headers')
+makedepends=('linux-omarchy-headers')
+conflicts=('macbook12-spi-driver-dkms' 'apple-ib-drv-dkms' 'apple-ib-drv-dkms-git'
+           'apple-t1-touchbar-dkms-local')
+backup=('etc/modprobe.d/apple-t1-touchbar.conf')
+options=('!strip' '!debug' '!lto')
+
+_pin=a33c7eb27777339c047b8f532d1e6baebaec46bd
+_base="https://raw.githubusercontent.com/monomyth/t1-touchbar/${_pin}/apple-ib-drv"
+source=("${_base}/apple-ibridge.c"
+        "${_base}/apple-touchbar.c"
+        "${_base}/apple-ibridge.h"
+        "${_base}/hid-ids.h"
+        "${_base}/Makefile"
+        "${_base}/LICENSE"
+        'dkms.conf'
+        'apple-t1-touchbar.conf'
+        'apple-t1-touchbar.service'
+         't1-touchbar'
+         'test_t1_touchbar.py'
+         'README.md'
+         '99-zz-apple-gmux-backlight.rules')
+sha256sums=('96fc45f6ab17a01a1472e180ad7ff36648188db7a65dfc6712cf24eb7b09952d'
+            'ed4e076a117c354740fabf69baea592f735e007d337b1a1673bf5ec5fe1ec8f5'
+            '34d7c6c294a657b3675502e9e082cb5499ef0204c4a0206360be7498a3754754'
+            '70b551b047fc5c4e8c029764b64ef0a6167aa93b55913459f8df487ec1be2974'
+            '0b83960367a409292ce1b12c2d3cb62aa3a1bf9b5a911a999b9de1a222f33982'
+            'db296f2f7f35bca3a174efb0eb392b3b17bd94b341851429a3dff411b1c2fc73'
+            'caf9f6bb22cc5c4940dc62ca19e307bde2a2946b139eaf348afaa87964522b1f'
+            '9180d262cc8c7ee615a0928a2dae57b1ba11e46bf15ad6a261a79ed8eb70105c'
+            '2cceada4b2994f9a7107c6bae033e5226c3058b707f078848eced5a312e8dc64'
+            '8dda01c561c9819e53241cb60920ac3828be1849a07558259166cfb0010938a4'
+            '787d5393d26c3819669e00b14f687136106ee629cb49cf52dcc784baa0e0d853'
+            '8804d88710e880fdc9f019483a5089c9928e882b77904e3651b3d1cf8cc19ae0'
+            'a84a3e9247e37ba5505faf0080d2f6a29ba90fc579df2b279f12f62fd191eee3')
+
+build() {
+  # A chroot/container shares the host uname, not its installed kernel headers.
+  local headers kernel module built=0
+  for headers in /usr/lib/modules/*/build; do
+    [[ -f "$headers/Makefile" ]] || continue
+    kernel=${headers%/build}
+    kernel=${kernel##*/}
+    make -C "$headers" M="$srcdir" clean
+    make -C "$headers" M="$srcdir" -j2 modules
+    for module in apple-ibridge apple-touchbar; do
+      [[ $(modinfo -F vermagic "$srcdir/$module.ko") == "$kernel "* ]] || return 1
+    done
+    built=1
+  done
+  (( built )) || { error 'No installed kernel headers found'; return 1; }
+}
+
+check() {
+  PYTHONDONTWRITEBYTECODE=1 python3 -B "$srcdir/test_t1_touchbar.py" -v
+}
+
+package() {
+  local dest="$pkgdir/usr/src/apple-t1-touchbar-${pkgver}"
+  install -d "$dest"
+  install -m644 "$srcdir"/{apple-ibridge.c,apple-touchbar.c,apple-ibridge.h,hid-ids.h,Makefile,LICENSE,dkms.conf} "$dest/"
+  install -Dm644 "$srcdir/apple-t1-touchbar.conf" "$pkgdir/etc/modprobe.d/apple-t1-touchbar.conf"
+  install -Dm644 "$srcdir/apple-t1-touchbar.service" "$pkgdir/usr/lib/systemd/system/apple-t1-touchbar.service"
+  install -Dm755 "$srcdir/t1-touchbar" "$pkgdir/usr/lib/apple-t1-touchbar/t1-touchbar"
+  install -Dm644 "$srcdir/99-zz-apple-gmux-backlight.rules" "$pkgdir/usr/lib/udev/rules.d/99-zz-apple-gmux-backlight.rules"
+  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

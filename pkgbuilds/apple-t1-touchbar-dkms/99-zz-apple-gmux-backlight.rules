@@ -1,0 +1,3 @@
+# gmux is on PNP, where the stock path_id builtin fails. Keep native systemd
+# save/restore but supply a stable identity without the failing IMPORT match.
+ACTION=="add|change", SUBSYSTEM=="backlight", KERNEL=="gmux_backlight", ENV{ID_PATH}="platform-apple-gmux", TAG+="systemd", ENV{SYSTEMD_WANTS}+="systemd-backlight@backlight:gmux_backlight.service"

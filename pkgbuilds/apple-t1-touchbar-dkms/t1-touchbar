@@ -1,0 +1,254 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-2.0-only
+"""Read-only diagnosis, and an explicit guarded T1 driver start operation."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import platform
+import subprocess
+import sys
+
+SYS = Path("/sys")
+PROC = Path("/proc")
+GUARD = Path("/run/modprobe.d/t1-staged-recovery.conf")
+MODEL = "MacBookPro14,3"
+PIN = "a33c7eb27777339c047b8f532d1e6baebaec46bd"
+GENERIC_OWNERS = {"hid-generic", "hid-sensor-hub"}
+PARAMETERS = {
+    "apple_touchbar": {"fnmode": "2", "idle_timeout": "-1", "dim_timeout": "-1"},
+    "apple_ibridge": {"skip_acpi_power": "1"},
+}
+INCOMPATIBLE = ("apple_ib_tb", "apple_ib_als", "apple_dfr_cfgsel", "t1_cfgsel")
+
+
+class Refused(RuntimeError):
+    pass
+
+
+def read(path):
+    return path.read_text().strip()
+
+
+def need(condition, message):
+    if not condition:
+        raise Refused(message)
+
+
+def usb_devices():
+    devices = []
+    for dev in sorted((SYS / "bus/usb/devices").glob("*")):
+        try:
+            if read(dev / "idVendor") == "05ac":
+                pid = read(dev / "idProduct")
+                if pid in {"8600", "1281"}:
+                    devices.append((dev, pid))
+        except FileNotFoundError:
+            continue
+    return devices
+
+
+def identity(dev):
+    need(read(dev / "idVendor") == "05ac" and read(dev / "idProduct") == "8600",
+         "T1 is no longer 05ac:8600; no recovery-mode writes are allowed")
+    return (dev.resolve(strict=True), dev.stat().st_ino, read(dev / "devnum"))
+
+
+def healthy_target():
+    # ExecCondition intentionally checks only the target platform and USB state.
+    need(read(SYS / "class/dmi/id/product_name") == MODEL, f"Requires {MODEL}")
+    need((SYS / "devices/platform/APP7777:00").is_dir(), "No APP7777 platform device")
+    healthy = [dev for dev, pid in usb_devices() if pid == "8600"]
+    need(len(healthy) == 1, "Requires exactly one healthy 05ac:8600 T1")
+    dev = healthy[0]
+    if (dev / "removable").exists():
+        need(read(dev / "removable") != "removable", "T1 USB device is marked removable")
+    return dev, identity(dev)
+
+
+def check_target(target):
+    dev, token = target
+    need(identity(dev) == token, "T1 re-enumerated; restart the operation after inspection")
+
+
+def owner(dev):
+    link = dev / "driver"
+    return link.resolve(strict=True).name if link.is_symlink() else None
+
+
+def hid_nodes(target, virtual=False):
+    pattern = "0003:1D6B:0301.*" if virtual else "0003:05AC:8600.*"
+    usb_root = target[1][0]
+    return [dev for dev in sorted((SYS / "bus/hid/devices").glob(pattern))
+            if usb_root in dev.resolve(strict=True).parents]
+
+
+def check_owner(dev, wanted):
+    current = owner(dev)
+    need(current in GENERIC_OWNERS | {None, wanted},
+         f"Refusing to displace unexpected owner {current!r} of {dev.name}")
+    return current
+
+
+def write_sysfs(path, value, target):
+    check_target(target)
+    path.write_text(value + "\n")
+
+
+def handover(dev, wanted, target):
+    check_target(target)
+    previous = check_owner(dev, wanted)
+    if previous == wanted:
+        return
+    drivers = SYS / "bus/hid/drivers"
+    need((drivers / wanted / "bind").exists(), f"Target HID driver {wanted} is not registered")
+    if previous:
+        write_sysfs(drivers / previous / "unbind", dev.name, target)
+    try:
+        write_sysfs(drivers / wanted / "bind", dev.name, target)
+        need(owner(dev) == wanted, f"Binding {dev.name} to {wanted} did not take effect")
+    except (OSError, Refused) as error:
+        recovery = "device was originally unbound"
+        if previous:
+            try:
+                # Never restore a binding onto a changed/recovery-mode device.
+                check_target(target)
+                current = owner(dev)
+                if current == wanted:
+                    write_sysfs(drivers / wanted / "unbind", dev.name, target)
+                else:
+                    need(current in {None, previous}, "An unexpected driver raced the rollback")
+                if owner(dev) != previous:
+                    write_sysfs(drivers / previous / "bind", dev.name, target)
+                need(owner(dev) == previous, "Original driver did not rebind")
+                recovery = f"restored original driver {previous}"
+            except (OSError, Refused) as rollback_error:
+                recovery = f"ROLLBACK FAILED: {rollback_error}"
+        raise Refused(f"HID handover failed: {error}; {recovery}") from error
+    print(f"{dev.name}: {previous or 'unbound'} -> {wanted}", flush=True)
+
+
+def run(*args):
+    # No inherited MODPROBE_OPTIONS, LD_*, shell, or Python environment overrides.
+    subprocess.run(args, check=True, timeout=30,
+                   env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"})
+
+
+def check_parameters(module):
+    base = SYS / "module" / module
+    need(base.is_dir(), f"{module} did not load")
+    for name, expected in PARAMETERS[module].items():
+        need(read(base / "parameters" / name) == expected,
+             f"{module}.{name} must be {expected}; refusing automatic reload")
+
+
+def start():
+    target = healthy_target()  # Recheck even if systemd already ran ExecCondition.
+    need(os.geteuid() == 0, "The explicit start operation requires root")
+    need(not GUARD.exists() and not GUARD.is_symlink(),
+         "Recovery guard is still present; use recovery's release-guards stage first")
+    for module in INCOMPATIBLE:
+        need(not (SYS / "module" / module).exists(), f"Incompatible module is loaded: {module}")
+    for module in PARAMETERS:
+        if (SYS / "module" / module).exists():
+            check_parameters(module)
+    need(read(SYS / "module/applespi/parameters/fnremap") == "0",
+         "Physical Fn is remapped or applespi is absent; inspect before starting")
+    config = read(target[0] / "bConfigurationValue")
+    need(config in {"", "0", "1"},
+         "Configuration 2/other is active; refusing to disrupt a custom display stack")
+    # Check every currently visible candidate before loading or unbinding anything.
+    for virtual, wanted in ((False, "apple-ibridge-hid"), (True, "apple-touchbar")):
+        for dev in hid_nodes(target, virtual):
+            check_owner(dev, wanted)
+
+    power = target[0] / "power/control"
+    if power.exists() and read(power) != "on":
+        write_sysfs(power, "on", target)
+    if config != "1":
+        write_sysfs(target[0] / "bConfigurationValue", "1", target)
+        run("/usr/bin/udevadm", "settle", "--timeout=10")
+    for module, params in PARAMETERS.items():
+        check_target(target)
+        run("/usr/bin/modprobe", module, *(f"{name}={value}" for name, value in params.items()))
+        check_parameters(module)
+
+    physical = hid_nodes(target)
+    need(physical, "No physical T1 HID nodes appeared in configuration 1")
+    for dev in physical:
+        handover(dev, "apple-ibridge-hid", target)
+    run("/usr/bin/udevadm", "settle", "--timeout=10")
+    children = hid_nodes(target, virtual=True)
+    need(children, "Bridge created no virtual Touch Bar HID children")
+    controls = 0
+    for dev in children:
+        handover(dev, "apple-touchbar", target)
+        if (dev / "fnmode").exists():
+            for name, value in PARAMETERS["apple_touchbar"].items():
+                write_sysfs(dev / name, value, target)
+                need(read(dev / name) == value, f"{dev.name}/{name} did not retain {value}")
+            controls += 1
+    need(controls > 0, "No active Touch Bar fnmode control appeared")
+    keyboard = [block for block in read(PROC / "bus/input/devices").split("\n\n")
+                if 'Name="Apple SPI Keyboard"' in block]
+    need(any("tbkbd" in block for block in keyboard),
+         "Touch Bar did not attach its Fn handler to the Apple SPI Keyboard")
+    check_target(target)
+    # usbhid_start() enables wakeup for boot-protocol keyboards while binding.
+    # Apply this machine's selected policy AFTER every HID handover, not in an
+    # early udev add rule. This is a wake-source policy, not a PCIe resume fix.
+    wakeup = target[0] / "power/wakeup"
+    if wakeup.exists():
+        write_sysfs(wakeup, "disabled", target)
+        need(read(wakeup) == "disabled", "T1 remote-wake policy did not take effect")
+    print("Driver bound; Fn handler attached; fnmode=2. Physically test Esc, F1-F12 and Fn/media.")
+
+
+def preflight():
+    kernel = platform.release()
+    devices = []
+    for dev, pid in usb_devices():
+        devices.append({"path": str(dev), "id": f"05ac:{pid}",
+                        "configuration": read(dev / "bConfigurationValue")})
+    try:
+        target = healthy_target()
+        readiness = "healthy T1 and supported platform"
+        bindings = {dev.name: owner(dev) for virtual in (False, True)
+                    for dev in hid_nodes(target, virtual)}
+    except (OSError, Refused) as error:
+        readiness, bindings = str(error), {}
+    print(json.dumps({
+        "source_pin": PIN,
+        "kernel": kernel,
+        "matching_headers": Path(f"/usr/lib/modules/{kernel}/build/Makefile").is_file(),
+        "usb": devices,
+        "load_condition": readiness,
+        "recovery_guard_present": GUARD.exists() or GUARD.is_symlink(),
+        "hid_bindings": bindings,
+        "loaded_modules": [name for name in (*PARAMETERS, *INCOMPATIBLE, "applespi")
+                           if (SYS / "module" / name).exists()],
+        "note": "Read-only. Building/packaging does not require healthy firmware.",
+    }, indent=2))
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("preflight", "condition", "start"))
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "preflight":
+            return preflight()
+        if args.command == "condition":
+            healthy_target()
+        else:
+            start()
+        return 0
+    except (OSError, Refused, subprocess.SubprocessError) as error:
+        print(f"t1-touchbar: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
