@@ -12,6 +12,8 @@ license=('MIT')
 # feature executes, and that the code probes for first, is an optdepend. The
 # citations for each entry are in .omarchy/README.md.
 depends=(
+  'cua-driver-bin>=0.27.0'
+  'cua-hyprland-plugin>=0.26.1'
   'hyprland'
   'imagemagick'
   'jq'
@@ -44,30 +46,63 @@ optdepends=(
 # splitting would corrupt them.
 options=('!strip' '!debug')
 
-source_x86_64=("$url/releases/download/v$pkgver/$pkgname-$pkgver-linux-x86_64.tar.gz")
-# Fill from the SHA256SUMS asset of https://github.com/omacom/atreyu/releases/tag/v0.1.0
-sha256sums_x86_64=('FILL_FROM_UPSTREAM_SHA256SUMS')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# Fill once the v0.1.0 tag exists; sync-upstream only updates newer versions.
+# curl -fsSL https://github.com/omacom/atreyu/archive/refs/tags/v0.1.0.tar.gz | sha256sum
+sha256sums=('FILL_FROM_RELEASE_ARCHIVE')
 
 package() {
   local plugin="$pkgdir/usr/share/omarchy/plugins/omarchy.atreyu"
 
-  # The archive's single top-level directory is the complete plugin install
-  # tree. Copy it whole so nothing the shell or broker expects is left behind,
-  # then normalize modes: directories 0755, files 0644 or 0755 as shipped, and
-  # no group/world write bits regardless of the builder's umask.
-  install -d "$plugin"
-  cp -a "$pkgname-$pkgver/." "$plugin/"
-  chmod -R u=rwX,go=rX "$plugin"
+  cd "$srcdir/$pkgname-$pkgver" || return 1
 
-  # The shell scans the system plugin root for manifests; a tree without one
-  # would install cleanly and silently never load.
-  [[ -f "$plugin/manifest.json" ]] || {
-    echo "release tree is missing manifest.json" >&2
+  jq -e --arg version "$pkgver" '
+    .id == "omarchy.atreyu" and .version == $version and
+    .entryPoints.barWidget == "BarWidget.qml" and .entryPoints.overlay == "Ambient.qml"
+  ' manifest.json >/dev/null || {
+    echo "manifest.json must declare omarchy.atreyu at $pkgver with BarWidget.qml and Ambient.qml entry points" >&2
     return 1
   }
 
-  # Re-assert the executables the plugin invokes directly. A missing entry
-  # fails the build rather than shipping a plugin that cannot start.
+  # Keep the tagged runtime payload; source, tests and release tooling stay out.
+  local file directory
+  for file in \
+    manifest.json \
+    BarWidget.qml \
+    Ambient.qml \
+    ContextCaptureOverlay.qml \
+    Panel.qml \
+    LICENSE \
+    THIRD_PARTY_NOTICES.md \
+    package.json \
+    package-lock.json \
+    scripts/install-hotkeys.sh \
+    scripts/install-browser-companion.sh \
+    scripts/manage-voice-escape.sh \
+    runtime/adapters.release.json \
+    runtime/system-dependencies.txt \
+    runtime/bin/atreyu-broker \
+    runtime/bin/codex-acp \
+    runtime/dist/atreyu-broker \
+    runtime/dist/atreyu-broker.LEGAL.txt \
+    runtime/dist/atreyu-broker.THIRD_PARTY_LICENSES.txt \
+    runtime/dist/adapters/codex-acp \
+    runtime/dist/adapters/Apache-2.0.txt \
+    runtime/policies/automatic.md; do
+    install -Dm644 "$file" "$plugin/$file" || return 1
+  done
+  for directory in components assets runtime/licenses browser-companion/dist browser-companion/native-host; do
+    [[ -d $directory && -n $(find "$directory" -type f -print -quit) ]] || {
+      echo "release tree is missing runtime files under $directory" >&2
+      return 1
+    }
+    install -d "$plugin/$(dirname "$directory")" || return 1
+    cp -r "$directory" "$plugin/$directory" || return 1
+  done
+  find "$plugin" -type d -exec chmod 755 {} + || return 1
+  find "$plugin" -type f -exec chmod 644 {} + || return 1
+
+  # Only the commands invoked directly need executable bits.
   local executable
   for executable in \
     runtime/bin/atreyu-broker \
@@ -78,11 +113,11 @@ package() {
     scripts/install-browser-companion.sh \
     scripts/manage-voice-escape.sh \
     browser-companion/native-host/atreyu-browser-companion-host; do
-    chmod 755 "$plugin/$executable"
+    chmod 755 "$plugin/$executable" || return 1
   done
 
-  install -Dm644 "$pkgname-$pkgver/LICENSE" \
+  install -Dm644 LICENSE \
     "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-  install -Dm644 "$pkgname-$pkgver/THIRD_PARTY_NOTICES.md" \
+  install -Dm644 THIRD_PARTY_NOTICES.md \
     "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
 }
