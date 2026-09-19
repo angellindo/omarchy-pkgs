@@ -39,3 +39,7 @@ On this machine, `01:00.0` is the Radeon GPU and `02:00.0` is Samsung NVMe (`144
 ## Packaging review limits
 
 The source package, loader tests, udev syntax and unit verification passed. The build emitted a fakeroot payload warning; the build completed and archive ownership/modes were inspected, but official packaging CI should rebuild it in a clean chroot. No binary built on this workstation is proposed for distribution. Repository-wide test results are recorded in [TESTS.md](TESTS.md).
+
+## Follow-up, 2026-09-19
+
+The short-cycle results above do not establish overnight reliability or low sleep consumption. [Additional measurements and the overnight failure](suspend-follow-up.md) document both limitations; the overnight failure occurred without the one-shot protection active.

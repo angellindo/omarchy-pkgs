@@ -36,3 +36,5 @@ A skipped service condition is not a successful hardware test. Verify the servic
 The pinned driver and loader were tested on MacBookPro14,3 with `7.2.5-3-omarchy`, including physical keys, camera, firmware persistence and native brightness restoration after a normal restart. The loader has sixteen fake-sysfs tests, including refusals and rollback. The build checks compilation and module vermagic against installed headers rather than the build host's `uname`.
 
 Complete Wi-Fi/Thunderbolt suspend recovery is outside this package. A separate local experiment recovered those devices in three cycles by protecting Wi-Fi and removing/re-enumerating empty Thunderbolt branches, but USB 3.x transfers, 5 GHz Wi-Fi and attached-peripheral suspend remain unvalidated. That workaround is not installed by this package.
+
+[Subsequent testing](../../docs/macbookpro14-3/suspend-follow-up.md) found high sleep consumption even with the experimental protection and an overnight Wi-Fi/Thunderbolt failure without it. Do not treat working Touch Bar input as proof of reliable or low-power lid suspension.

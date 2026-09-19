@@ -25,3 +25,7 @@
 The full suite is therefore not green in this environment. These results must accompany any submission; do not claim all repository tests passed. No unrelated production code was changed to silence the failures.
 
 The package build also emitted a fakeroot payload warning despite completing successfully. Archive ownership and modes were inspected. An official clean-chroot rebuild remains necessary before publishing the package; the workstation-built binary is excluded from this submission.
+
+## Documentation update, 2026-09-19
+
+See [suspend follow-up](suspend-follow-up.md) for subsequent hardware observations. This update changes documentation only; the historical build/test results above were not rerun and are not new validation of system sleep.
