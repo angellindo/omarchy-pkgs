@@ -1,0 +1,13 @@
+diff --git a/drivers/input/keyboard/applespi.c b/drivers/input/keyboard/applespi.c
+--- a/drivers/input/keyboard/applespi.c
++++ b/drivers/input/keyboard/applespi.c
+@@ -1855,6 +1855,9 @@ static int applespi_suspend(struct device *dev)
+ 		dev_warn(&applespi->spi->dev,
+ 			 "Failed to turn off caps-lock led (%d)\n", sts);
+ 
++	/* Level 0 is the off packet; drain below waits for it. */
++	applespi_set_bl_level(&applespi->backlight_info, 0);
++
+ 	applespi_drain_writes(applespi);
+ 
+ 	/* disable the interrupt */
