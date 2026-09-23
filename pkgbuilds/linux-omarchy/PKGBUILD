@@ -128,6 +128,7 @@ source=(
   0750-applesmc-cache-race.patch{,.sig}
   0751-applesmc-key-backlight-workqueue-leak.patch{,.sig}
   0752-applespi-backlight-off-on-suspend.patch
+  0753-applesmc-stop-fans-in-s2idle.patch
   0770-acpi-pm-acer-swift3-sf314-56g-power-resource.patch{,.sig}
   0800-platform-updates.patch{,.sig}
   0801-amd-pmf-util-unbind-use-after-free.patch{,.sig}
@@ -311,6 +312,7 @@ b2sums=('48551bee71cd02815136fb8abe7da4464c2e17c89ef35cb0c0530c8b969fe12127ca97a
         '03ca740048e48c5b6948f972f7a826240cf51c9b5c8645d1b1c50366e78cbf45f5b45b7b47f87f231b50aab46ef2f8fd78bc53899ba1c319a19f9f61c7cecb90'
         'SKIP'
         '316bfe90c05a3503cb74a22c5589edbbb88ea10b1480da773fa104ef9c661b5d8f45ca473acb7fa144da91a2ef38c9dec4527ff4acf104979da3cc22fd7d37a7'
+        '3e6c0a1d0876536a23368e4601d31a3eb0ad5efbac43c92b3000c25a731d61b40f968f9c2c07d5ca7ce3ce340141f5d3c3987eac4a8aae4a6554459fa6d1f5e9'
         '1b63569b589e994d1869e2f8eaf5d4ee225fe68862ac5c848e46544b827ca5fddb4bf060f5f39001608fd9bb284eec005f5f9b095307d3a008c9ea8957c2fad1'
         'SKIP'
         '073514dabc88f0206911eb27eb36157e425849221056438340b22ee7bfa6997b58ce7dc4470b09d7ee96f6374f117d91cc19d9032401b2355d1c0aba6fc75771'
@@ -507,6 +509,7 @@ sha256sums=('55ddf0df8325d9dad96fcff7bd93977d22e3f50af06527572af59b77c7632b78'
             '0b0e05b615ae6eb825bf7d7fa568f551b0dff6c2cee62c9285c1b0d63224ea1c'
             'SKIP'
             '919eeffa2333303b1b86d4b30f89f267ac3d8036e1e60b816ee4c0b203c9f455'
+            '2eaa6c26bb72e9880c08c24542f1b80793fb6999cade26c95fde3c8096f6a355'
             '2e1e2a0eb039ce61c1612bf6c7ab5227b99df053bcd5592da7758715dd333fda'
             'SKIP'
             '17de1f76da3db42dc3c7829a22953cd2c6de916999d809e3fb0bbb741753ec8f'
